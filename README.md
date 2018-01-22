@@ -5,4 +5,4 @@ GCM XMPP Client.
 
 
 Reference:
-- [Implementing a XMPP Connection Serve](https://developers.google.com/cloud-messaging/ccs)
+- [Implementing a XMPP Connection Server](https://developers.google.com/cloud-messaging/ccs)
