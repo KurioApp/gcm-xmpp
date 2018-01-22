@@ -275,7 +275,7 @@ func (c ClientOptions) maxPendMsgs() uint {
 }
 
 // Handler handle incoming message.
-// Message can me Ack, Nack, Receipt, Control.
+// Message can be Ack, Nack, Receipt, Control.
 // Message handling should not block too long. Long running message handling should be done in another go routine.
 // All returned error ignored except Receipt. Nil error will send back ack to the server.
 type Handler interface {
