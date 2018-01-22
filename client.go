@@ -253,8 +253,8 @@ func NewClient(senderID int, apiKey string, opts ClientOptions) (*Client, error)
 
 // ClientOptions is the options for the client.
 type ClientOptions struct {
-	Endpoint           Endpoint // Used endpoint Default to Prod
-	MaxPendingMessages uint     // Max pending messages. Default to 100
+	Endpoint           Endpoint // Used endpoint Default to Prod.
+	MaxPendingMessages uint     // Max pending messages. Default to 100.
 	Debug              bool     // Enable debug mode. Default to false.
 }
 
@@ -276,8 +276,10 @@ func (c ClientOptions) maxPendMsgs() uint {
 
 // Handler handle incoming message.
 // Message can be Ack, Nack, Receipt, Control.
+//
 // Message handling should not block too long. Long running message handling should be done in another go routine.
-// All returned error ignored except Receipt. Nil error will send back ack to the server.
+//
+// All returned error ignored except Receipt. Nil error will send back ack to the server, otherwise no ack (or nack) will be sent.
 type Handler interface {
 	Handle(msg interface{}) error
 }
@@ -344,27 +346,27 @@ func (o SendOptions) ttl() uint {
 
 // Ack message.
 type Ack struct {
-	MessageID string // Original message id
-	From      string // App registration token
+	MessageID string // Original message id.
+	From      string // App registration token.
 }
 
 // Nack message.
 type Nack struct {
-	MessageID        string // Original message id
-	From             string // App registration token
-	Error            string // Error code (ex: BAD_REGISTRATION, DEVICE_MESSAGE_RATE_EXCEEDED, INVALID_JSON)
-	ErrorDescription string // Error description
+	MessageID        string // Original message id.
+	From             string // App registration token.
+	Error            string // Error code (ex: BAD_REGISTRATION, DEVICE_MESSAGE_RATE_EXCEEDED, INVALID_JSON).
+	ErrorDescription string // Error description.
 }
 
 // Receipt message.
 type Receipt struct {
-	MessageStatus string    // Message status (ex: MESSAGE_SENT_TO_DEVICE)
-	MessageID     string    // Original message id
-	From          string    // App registration token
-	SentTime      time.Time // Sent timestamp
+	MessageStatus string    // Message status (ex: MESSAGE_SENT_TO_DEVICE).
+	MessageID     string    // Original message id.
+	From          string    // App registration token.
+	SentTime      time.Time // Sent timestamp.
 }
 
 // Control message.
 type Control struct {
-	Type string // Control type, currently only CONNECTION_DRAINING
+	Type string // Control type, currently only CONNECTION_DRAINING.
 }
