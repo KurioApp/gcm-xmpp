@@ -253,9 +253,9 @@ func NewClient(senderID int, apiKey string, opts ClientOptions) (*Client, error)
 
 // ClientOptions is the options for the client.
 type ClientOptions struct {
-	Endpoint           Endpoint // default: Prod
-	MaxPendingMessages uint     // default: 100
-	Debug              bool     // debug mode
+	Endpoint           Endpoint // Used endpoint Default to Prod
+	MaxPendingMessages uint     // Max pending messages. Default to 100
+	Debug              bool     // Enable debug mode. Default to false.
 }
 
 func (c ClientOptions) endpoint() (string, int) {
@@ -328,9 +328,9 @@ type receiptData struct {
 
 // SendOptions is the send options.
 type SendOptions struct {
-	DryRun                 bool
-	RequestDeliveryReceipt bool
-	TimeToLive             time.Duration
+	DryRun                 bool          // Test without actually sending. Default to false.
+	RequestDeliveryReceipt bool          // Request for deliverey receipt. Default to false.
+	TimeToLive             time.Duration // Time to live. Default to 4 weeks, max up to 4 weeks.
 }
 
 func (o SendOptions) ttl() uint {
@@ -344,27 +344,27 @@ func (o SendOptions) ttl() uint {
 
 // Ack message.
 type Ack struct {
-	MessageID string
-	From      string
+	MessageID string // Original message id
+	From      string // App registration token
 }
 
 // Nack message.
 type Nack struct {
-	MessageID        string
-	From             string
-	Error            string
-	ErrorDescription string
+	MessageID        string // Original message id
+	From             string // App registration token
+	Error            string // Error code
+	ErrorDescription string // Error description
 }
 
 // Receipt message.
 type Receipt struct {
-	MessageStatus string
-	MessageID     string
-	From          string
-	SentTime      time.Time
+	MessageStatus string    // Message status (ex: MESSAGE_SENT_TO_DEVICE)
+	MessageID     string    // Original message id
+	From          string    // App registration token
+	SentTime      time.Time // Sent timestamp
 }
 
 // Control message.
 type Control struct {
-	Type string
+	Type string // Control type, currently only CONNECTION_DRAINING
 }
