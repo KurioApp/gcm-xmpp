@@ -352,7 +352,7 @@ type Ack struct {
 type Nack struct {
 	MessageID        string // Original message id
 	From             string // App registration token
-	Error            string // Error code
+	Error            string // Error code (ex: BAD_REGISTRATION, DEVICE_MESSAGE_RATE_EXCEEDED, INVALID_JSON)
 	ErrorDescription string // Error description
 }
 
