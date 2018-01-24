@@ -176,7 +176,7 @@ func (c *Client) Listen(h Handler) error {
 				}
 
 				<-c.messagec
-				_ = h.Handle(Ack{From: sm.From, MessageID: sm.MessageID})
+				_ = h.Handle(Ack{From: sm.From, MessageID: sm.MessageID, CanonicalRegistrationID: sm.RegistrationID})
 			case "nack":
 				if ok := c.untrackMsg(sm.MessageID); !ok {
 					continue
@@ -316,6 +316,7 @@ type serverMessage struct {
 	MessageID        string          `json:"message_id"`
 	Data             json.RawMessage `json:"data"`
 	From             string          `json:"from"`
+	RegistrationID   string          `json:"registration_id"`
 	Error            string          `json:"error"`
 	ErrorDescription string          `json:"error_description"`
 	ControlType      string          `json:"control_type"`
@@ -346,8 +347,9 @@ func (o SendOptions) ttl() uint {
 
 // Ack message.
 type Ack struct {
-	MessageID string // Original message id.
-	From      string // App registration token.
+	MessageID               string // Original message id.
+	From                    string // App registration token.
+	CanonicalRegistrationID string // Canonical registration id.
 }
 
 // Nack message.
