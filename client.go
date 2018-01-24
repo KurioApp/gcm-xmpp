@@ -84,7 +84,7 @@ func (c *Client) SendData(ctx context.Context, msgID string, token string, data 
 	}
 
 	if ok := c.trackMsg(msgID); !ok {
-		return errors.New("duplicate message")
+		return errors.New("gcm-xmpp: duplicate message")
 	}
 
 	msg := message{
@@ -153,12 +153,12 @@ func (c *Client) Listen(h Handler) error {
 			}
 			continue
 		default:
-			return fmt.Errorf("unexpected stanza: %s", reflect.TypeOf(stanza))
+			return fmt.Errorf("gcm-xmpp: unexpected stanza %s", reflect.TypeOf(stanza))
 		}
 
 		v := stanza.(xmpp.Chat)
 		if len(v.Other) == 0 {
-			return errors.New("no data to decode")
+			return errors.New("gcm-xmpp: no data to decode")
 		}
 
 		var sm serverMessage
