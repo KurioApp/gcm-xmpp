@@ -6,13 +6,6 @@ GOOS := $(shell go env GOOS)
 GOARCH = $(shell go env GOARCH)
 OBJ_DIR := $(GOPATH)/pkg/$(GOOS)_$(GOARCH)/$(PACKAGE)
 
-# Database
-DB_USER ?= playground
-DB_PASSWORD ?= secret
-DB_PORT ?= 3306
-DB_ADDRESS ?= 127.0.0.1:${DB_PORT}
-DB_NAME ?= playground
-
 # Dependencies Management
 .PHONY: vendor-prepare
 vendor-prepare:
