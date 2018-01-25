@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"reflect"
 	"strconv"
 	"sync"
@@ -85,7 +84,14 @@ func (c *Client) untrackMsg(id string) bool {
 	return true
 }
 
-// SendData to a destination token. The ctx used for flow control, might wait for pending messages.
+func (c *Client) countTrackedMsg() int {
+	c.messagesMu.RLock()
+	defer c.messagesMu.RUnlock()
+
+	return len(c.messages)
+}
+
+// SendData to a destination token.
 func (c *Client) SendData(ctx context.Context, msgID string, token string, data interface{}, opts SendOptions) (err error) {
 	select {
 	case c.messagec <- struct{}{}:
@@ -125,7 +131,7 @@ func (c *Client) SendData(ctx context.Context, msgID string, token string, data 
 	return err
 }
 
-// Ping server. Better to always put timeout on the context.
+// Ping server.
 func (c *Client) Ping(ctx context.Context) error {
 	c.pingMu.Lock()
 	defer c.pingMu.Unlock()
@@ -163,7 +169,7 @@ func (c *Client) sendAck(msgID string, to string) error {
 }
 
 func (c *Client) listen(h Handler) error {
-	for {
+	for i := 0; ; i++ {
 		stanza, err := c.xc.Recv()
 		if err != nil {
 			return err
@@ -247,17 +253,37 @@ func (c *Client) listen(h Handler) error {
 				log.Printf("Unknown type: %#v\n", v)
 			}
 		}
+		if i%1000 == 0 {
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 }
 
 // Close the client.
-func (c *Client) Close() error {
+func (c *Client) Close(ctx context.Context) error {
 	if !atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosing) {
 		return errors.New("gcm-xmpp: not in connected state")
 	}
 
 	defer atomic.StoreInt32(&c.state, stateClosed)
-	return c.xc.Close()
+
+	if c.countTrackedMsg() == 0 {
+		return c.xc.Close()
+	}
+
+	timer := time.NewTicker(100 * time.Millisecond)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			if c.countTrackedMsg() == 0 {
+				return c.xc.Close()
+			}
+		case <-ctx.Done():
+			_ = c.xc.Close() // nolint: gas
+			return ctx.Err()
+		}
+	}
 }
 
 // NewClient constructs new client.
@@ -280,14 +306,8 @@ func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Cli
 	}
 
 	go func() {
-		log.Println("Listening")
-		err := c.listen(h)
-		log.Println("Listen done:", err)
-		if opErr, ok := err.(*net.OpError); ok {
-			if !opErr.Temporary() {
-				log.Println("Non temporary error.. close connection")
-				_ = c.Close() // nolint: gas
-			}
+		if err := c.listen(h); err != nil {
+			atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosed)
 		}
 	}()
 
