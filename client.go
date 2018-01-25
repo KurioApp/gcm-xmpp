@@ -308,7 +308,7 @@ type message struct {
 	DeliveryReceiptRequested bool        `json:"delivery_receipt_requested,omitempty"`
 	DryRun                   bool        `json:"dry_run,omitempty"`
 	TimeToLive               uint        `json:"time_to_live,omitempty"`
-	Data                     interface{} `json:"data,omitempty"`
+	Data                     interface{} `json:"data"`
 }
 
 type serverMessage struct {
