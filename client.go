@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"reflect"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	xmpp "github.com/mattn/go-xmpp"
@@ -36,6 +38,12 @@ const (
 const stanzaFmt = `<message id="%s"><gcm xmlns="google:mobile:data">%v</gcm></message>`
 const duration4Weeks = 4 * 7 * 24 * time.Hour
 
+const (
+	stateConnected int32 = iota
+	stateClosing
+	stateClosed
+)
+
 // Client of the GCM.
 type Client struct {
 	host  string
@@ -49,6 +57,8 @@ type Client struct {
 
 	pingMu sync.Mutex
 	pongc  chan struct{}
+
+	state int32
 }
 
 func (c *Client) trackMsg(id string) bool {
@@ -76,16 +86,27 @@ func (c *Client) untrackMsg(id string) bool {
 }
 
 // SendData to a destination token. The ctx used for flow control, might wait for pending messages.
-func (c *Client) SendData(ctx context.Context, msgID string, token string, data interface{}, opts SendOptions) error {
+func (c *Client) SendData(ctx context.Context, msgID string, token string, data interface{}, opts SendOptions) (err error) {
 	select {
 	case c.messagec <- struct{}{}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 
+	if atomic.LoadInt32(&c.state) != stateConnected {
+		return errors.New("gcm-xmpp: not in connected state")
+	}
+
 	if ok := c.trackMsg(msgID); !ok {
 		return errors.New("gcm-xmpp: duplicate message")
 	}
+
+	defer func() {
+		if err != nil {
+			c.untrackMsg(msgID)
+			<-c.messagec
+		}
+	}()
 
 	msg := message{
 		ID:   msgID,
@@ -108,6 +129,10 @@ func (c *Client) SendData(ctx context.Context, msgID string, token string, data 
 func (c *Client) Ping(ctx context.Context) error {
 	c.pingMu.Lock()
 	defer c.pingMu.Unlock()
+
+	if atomic.LoadInt32(&c.state) != stateConnected {
+		return errors.New("gcm-xmpp: not in connected state")
+	}
 
 	// clear pongc
 	for i := 0; i < len(c.pongc); i++ {
@@ -137,8 +162,7 @@ func (c *Client) sendAck(msgID string, to string) error {
 	return err
 }
 
-// Listen for response or incoming message from server.
-func (c *Client) Listen(h Handler) error {
+func (c *Client) listen(h Handler) error {
 	for {
 		stanza, err := c.xc.Recv()
 		if err != nil {
@@ -228,11 +252,16 @@ func (c *Client) Listen(h Handler) error {
 
 // Close the client.
 func (c *Client) Close() error {
+	if !atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosing) {
+		return errors.New("gcm-xmpp: not in connected state")
+	}
+
+	defer atomic.StoreInt32(&c.state, stateClosed)
 	return c.xc.Close()
 }
 
 // NewClient constructs new client.
-func NewClient(senderID int, apiKey string, opts ClientOptions) (*Client, error) {
+func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Client, error) {
 	host, port := opts.endpoint()
 	addr := fmt.Sprintf("%s:%d", host, port)
 	user := fmt.Sprintf("%d@%s", senderID, host)
@@ -241,14 +270,28 @@ func NewClient(senderID int, apiKey string, opts ClientOptions) (*Client, error)
 		return nil, err
 	}
 
-	return &Client{
+	c := &Client{
 		host:     host,
 		debug:    opts.Debug,
 		xc:       client,
 		messages: make(map[string]struct{}),
 		messagec: make(chan struct{}, opts.maxPendMsgs()),
 		pongc:    make(chan struct{}, 1),
-	}, nil
+	}
+
+	go func() {
+		log.Println("Listening")
+		err := c.listen(h)
+		log.Println("Listen done:", err)
+		if opErr, ok := err.(*net.OpError); ok {
+			if !opErr.Temporary() {
+				log.Println("Non temporary error.. close connection")
+				_ = c.Close() // nolint: gas
+			}
+		}
+	}()
+
+	return c, nil
 }
 
 // ClientOptions is the options for the client.

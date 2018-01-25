@@ -15,22 +15,36 @@ func ExampleClient() {
 		opts     = xmpp.ClientOptions{}
 	)
 
-	client, err := xmpp.NewClient(senderID, apiKey, opts)
+	handler := xmpp.HandlerFunc(func(msg interface{}) error {
+		switch v := msg.(type) {
+		case xmpp.Ack:
+			// TODO: handle ack
+			fmt.Println("Ack for ", v.MessageID)
+			return nil
+		case xmpp.Nack:
+			// TODO: handle nack
+			fmt.Println("Nack for ", v.MessageID)
+			return nil
+		case xmpp.Receipt:
+			// TODO: handle delivery receipt
+			fmt.Println("Delivery receipt for ", v.MessageID, "status:", v.MessageStatus)
+			return nil
+		case xmpp.Control:
+			// TODO: handle control message (ex: draining connection)
+			return nil
+		default:
+			// TODO: unknown message
+			return nil
+		}
+	})
+
+	client, err := xmpp.NewClient(senderID, apiKey, handler, opts)
 	if err != nil {
 		// TODO: handle error
 		return
 	}
 
-	handler := xmpp.HandlerFunc(func(msg interface{}) error {
-		// TODO: handle incoming message
-		return nil
-	})
-
-	go func() {
-		if err := client.Listen(handler); err != nil {
-			// TODO: handle error
-		}
-	}()
+	_ = client // TODO: client.Close() when client no longer used
 }
 
 func ExampleClient_SendData() {
@@ -73,38 +87,4 @@ func ExampleClient_SendData_struct() {
 	if err := client.SendData(ctx, msgID, to, data, opts); err != nil {
 		// TODO: handle error
 	}
-}
-
-func ExampleHandler() {
-	var client *xmpp.Client
-	// TODO: assign client
-
-	h := xmpp.HandlerFunc(func(msg interface{}) error {
-		switch v := msg.(type) {
-		case xmpp.Ack:
-			// TODO: handle ack
-			fmt.Println("Ack for ", v.MessageID)
-			return nil
-		case xmpp.Nack:
-			// TODO: handle nack
-			fmt.Println("Nack for ", v.MessageID)
-			return nil
-		case xmpp.Receipt:
-			// TODO: handle delivery receipt
-			fmt.Println("Delivery receipt for ", v.MessageID, "status:", v.MessageStatus)
-			return nil
-		case xmpp.Control:
-			// TODO: handle control message (ex: draining connection)
-			return nil
-		default:
-			// TODO: unknown message
-			return nil
-		}
-	})
-
-	go func() {
-		if err := client.Listen(h); err != nil {
-			// TODO: handle error
-		}
-	}()
 }
