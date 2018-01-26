@@ -206,14 +206,14 @@ func (c *Client) listen(h Handler) error {
 				}
 
 				<-c.messagec
-				_ = h.Handle(Ack{From: sm.From, MessageID: sm.MessageID, CanonicalRegistrationID: sm.RegistrationID})
+				_ = h.Handle(c, Ack{From: sm.From, MessageID: sm.MessageID, CanonicalRegistrationID: sm.RegistrationID})
 			case "nack":
 				if ok := c.untrackMsg(sm.MessageID); !ok {
 					continue
 				}
 
 				<-c.messagec
-				_ = h.Handle(Nack{From: sm.From, MessageID: sm.MessageID, Error: sm.Error, ErrorDescription: sm.ErrorDescription})
+				_ = h.Handle(c, Nack{From: sm.From, MessageID: sm.MessageID, Error: sm.Error, ErrorDescription: sm.ErrorDescription})
 			default:
 				if c.debug {
 					log.Printf("Unrecognized message type: %#v\n", sm)
@@ -234,7 +234,7 @@ func (c *Client) listen(h Handler) error {
 				}
 
 				sentTime := time.Unix(unix/1000, (unix%1000)*1000000)
-				if err := h.Handle(Receipt{From: data.DeviceRegistrationID, MessageID: data.OriginalMessageID, MessageStatus: data.MessageStatus, SentTime: sentTime}); err != nil {
+				if err := h.Handle(c, Receipt{From: data.DeviceRegistrationID, MessageID: data.OriginalMessageID, MessageStatus: data.MessageStatus, SentTime: sentTime}); err != nil {
 					continue
 				}
 
@@ -242,7 +242,7 @@ func (c *Client) listen(h Handler) error {
 					return err
 				}
 			case "control":
-				_ = h.Handle(Control{Type: sm.ControlType})
+				_ = h.Handle(c, Control{Type: sm.ControlType})
 			default:
 				if c.debug {
 					log.Printf("Unrecognized server message type: %#v\n", sm)
@@ -344,15 +344,15 @@ func (c ClientOptions) maxPendMsgs() uint {
 //
 // All returned error ignored except Receipt. Nil error will send back ack to the server, otherwise no ack (or nack) will be sent.
 type Handler interface {
-	Handle(msg interface{}) error
+	Handle(c *Client, msg interface{}) error
 }
 
 // HandlerFunc the the function adapter for Handler.
-type HandlerFunc func(msg interface{}) error
+type HandlerFunc func(c *Client, msg interface{}) error
 
 // Handle invoke f(msg).
-func (f HandlerFunc) Handle(msg interface{}) error {
-	return f(msg)
+func (f HandlerFunc) Handle(c *Client, msg interface{}) error {
+	return f(c, msg)
 }
 
 func buildStanza(m message) (string, error) {

@@ -15,7 +15,7 @@ func ExampleClient() {
 		opts     = xmpp.ClientOptions{}
 	)
 
-	handler := xmpp.HandlerFunc(func(msg interface{}) error {
+	handler := xmpp.HandlerFunc(func(c *xmpp.Client, msg interface{}) error {
 		switch v := msg.(type) {
 		case xmpp.Ack:
 			// TODO: handle ack
