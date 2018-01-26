@@ -344,14 +344,14 @@ func (c ClientOptions) maxPendMsgs() uint {
 //
 // All returned error ignored except Receipt. Nil error will send back ack to the server, otherwise no ack (or nack) will be sent.
 type Handler interface {
-	Handle(src interface{}, msg interface{}) error
+	Handle(src, msg interface{}) error
 }
 
 // HandlerFunc the the function adapter for Handler.
-type HandlerFunc func(src interface{}, msg interface{}) error
+type HandlerFunc func(src, msg interface{}) error
 
 // Handle invoke f(msg).
-func (f HandlerFunc) Handle(src interface{}, msg interface{}) error {
+func (f HandlerFunc) Handle(src, msg interface{}) error {
 	return f(src, msg)
 }
 
