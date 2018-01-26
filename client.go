@@ -206,14 +206,14 @@ func (c *Client) listen(h Handler) error {
 				}
 
 				<-c.messagec
-				_ = h.Handle(c, Ack{From: sm.From, MessageID: sm.MessageID, CanonicalRegistrationID: sm.RegistrationID})
+				_ = h.Handle(c, Ack{From: sm.From, MessageID: sm.MessageID, CanonicalRegistrationID: sm.RegistrationID}) // nolint: gas
 			case "nack":
 				if ok := c.untrackMsg(sm.MessageID); !ok {
 					continue
 				}
 
 				<-c.messagec
-				_ = h.Handle(c, Nack{From: sm.From, MessageID: sm.MessageID, Error: sm.Error, ErrorDescription: sm.ErrorDescription})
+				_ = h.Handle(c, Nack{From: sm.From, MessageID: sm.MessageID, Error: sm.Error, ErrorDescription: sm.ErrorDescription}) // nolint: gas
 			default:
 				if c.debug {
 					log.Printf("Unrecognized message type: %#v\n", sm)
@@ -242,7 +242,7 @@ func (c *Client) listen(h Handler) error {
 					return err
 				}
 			case "control":
-				_ = h.Handle(c, Control{Type: sm.ControlType})
+				_ = h.Handle(c, Control{Type: sm.ControlType}) // nolint: gas
 			default:
 				if c.debug {
 					log.Printf("Unrecognized server message type: %#v\n", sm)
