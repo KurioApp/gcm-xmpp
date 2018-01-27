@@ -48,53 +48,58 @@ type Client struct {
 	host  string
 	debug bool
 
-	xc       *xmpp.Client
-	messagec chan struct{}
+	client     *xmpp.Client
+	outMessage chan struct{}
 
-	messagesMu sync.RWMutex
-	messages   map[string]struct{}
+	pendingMessagesMu sync.RWMutex
+	pendingMessages   map[string]struct{}
 
 	pingMu sync.Mutex
-	pongc  chan struct{}
+	pong   chan struct{}
 
 	state int32
 }
 
-func (c *Client) trackMsg(id string) bool {
-	c.messagesMu.Lock()
-	defer c.messagesMu.Unlock()
-	_, found := c.messages[id]
+func (c *Client) trackPendingMsg(id string) bool {
+	c.pendingMessagesMu.Lock()
+	defer c.pendingMessagesMu.Unlock()
+	_, found := c.pendingMessages[id]
 	if found {
 		return false
 	}
 
-	c.messages[id] = struct{}{}
+	c.pendingMessages[id] = struct{}{}
 	return true
 }
 
-func (c *Client) untrackMsg(id string) bool {
-	c.messagesMu.Lock()
-	defer c.messagesMu.Unlock()
-	_, found := c.messages[id]
+func (c *Client) untrackPendingMsg(id string) bool {
+	c.pendingMessagesMu.Lock()
+	defer c.pendingMessagesMu.Unlock()
+	_, found := c.pendingMessages[id]
 	if !found {
 		return false
 	}
 
-	delete(c.messages, id)
+	delete(c.pendingMessages, id)
 	return true
 }
 
-func (c *Client) countTrackedMsg() int {
-	c.messagesMu.RLock()
-	defer c.messagesMu.RUnlock()
+func (c *Client) countPendingMessages() int {
+	c.pendingMessagesMu.RLock()
+	defer c.pendingMessagesMu.RUnlock()
 
-	return len(c.messages)
+	return len(c.pendingMessages)
 }
 
 // SendData to a destination token.
 func (c *Client) SendData(ctx context.Context, msgID string, token string, data interface{}, opts SendOptions) (err error) {
 	select {
-	case c.messagec <- struct{}{}:
+	case c.outMessage <- struct{}{}:
+		defer func() {
+			if err != nil {
+				<-c.outMessage
+			}
+		}()
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -103,14 +108,13 @@ func (c *Client) SendData(ctx context.Context, msgID string, token string, data 
 		return errors.New("gcm-xmpp: not in connected state")
 	}
 
-	if ok := c.trackMsg(msgID); !ok {
+	if ok := c.trackPendingMsg(msgID); !ok {
 		return errors.New("gcm-xmpp: duplicate message")
 	}
 
 	defer func() {
 		if err != nil {
-			c.untrackMsg(msgID)
-			<-c.messagec
+			c.untrackPendingMsg(msgID)
 		}
 	}()
 
@@ -127,7 +131,7 @@ func (c *Client) SendData(ctx context.Context, msgID string, token string, data 
 		return err
 	}
 
-	_, err = c.xc.SendOrg(stanza)
+	_, err = c.client.SendOrg(stanza)
 	return err
 }
 
@@ -141,16 +145,16 @@ func (c *Client) Ping(ctx context.Context) error {
 	}
 
 	// clear pongc
-	for i := 0; i < len(c.pongc); i++ {
-		<-c.pongc
+	for i := 0; i < len(c.pong); i++ {
+		<-c.pong
 	}
 
-	if err := c.xc.PingC2S("", c.host); err != nil {
+	if err := c.client.PingC2S("", c.host); err != nil {
 		return err
 	}
 
 	select {
-	case <-c.pongc:
+	case <-c.pong:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -164,13 +168,13 @@ func (c *Client) sendAck(msgID string, to string) error {
 		return err
 	}
 
-	_, err = c.xc.SendOrg(stanza)
+	_, err = c.client.SendOrg(stanza)
 	return err
 }
 
 func (c *Client) listen(h Handler) error {
 	for i := 0; ; i++ {
-		stanza, err := c.xc.Recv()
+		stanza, err := c.client.Recv()
 		if err != nil {
 			return err
 		}
@@ -178,8 +182,8 @@ func (c *Client) listen(h Handler) error {
 		switch v := stanza.(type) {
 		case xmpp.Chat:
 		case xmpp.IQ:
-			if v.Type == "result" && v.ID == "c2s1" && len(c.pongc) == 0 {
-				c.pongc <- struct{}{}
+			if v.Type == "result" && v.ID == "c2s1" && len(c.pong) == 0 {
+				c.pong <- struct{}{}
 			}
 			continue
 		default:
@@ -201,18 +205,18 @@ func (c *Client) listen(h Handler) error {
 			// a response
 			switch sm.MessageType {
 			case "ack":
-				if ok := c.untrackMsg(sm.MessageID); !ok {
+				if ok := c.untrackPendingMsg(sm.MessageID); !ok {
 					continue
 				}
 
-				<-c.messagec
+				<-c.outMessage
 				_ = h.Handle(c, Ack{From: sm.From, MessageID: sm.MessageID, CanonicalRegistrationID: sm.RegistrationID}) // nolint: gas
 			case "nack":
-				if ok := c.untrackMsg(sm.MessageID); !ok {
+				if ok := c.untrackPendingMsg(sm.MessageID); !ok {
 					continue
 				}
 
-				<-c.messagec
+				<-c.outMessage
 				_ = h.Handle(c, Nack{From: sm.From, MessageID: sm.MessageID, Error: sm.Error, ErrorDescription: sm.ErrorDescription}) // nolint: gas
 			default:
 				if c.debug {
@@ -267,8 +271,8 @@ func (c *Client) Close(ctx context.Context) error {
 
 	defer atomic.StoreInt32(&c.state, stateClosed)
 
-	if c.countTrackedMsg() == 0 {
-		return c.xc.Close()
+	if c.countPendingMessages() == 0 {
+		return c.client.Close()
 	}
 
 	timer := time.NewTicker(100 * time.Millisecond)
@@ -276,11 +280,11 @@ func (c *Client) Close(ctx context.Context) error {
 	for {
 		select {
 		case <-timer.C:
-			if c.countTrackedMsg() == 0 {
-				return c.xc.Close()
+			if c.countPendingMessages() == 0 {
+				return c.client.Close()
 			}
 		case <-ctx.Done():
-			_ = c.xc.Close() // nolint: gas
+			_ = c.client.Close() // nolint: gas
 			return ctx.Err()
 		}
 	}
@@ -297,12 +301,12 @@ func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Cli
 	}
 
 	c := &Client{
-		host:     host,
-		debug:    opts.Debug,
-		xc:       client,
-		messages: make(map[string]struct{}),
-		messagec: make(chan struct{}, opts.maxPendMsgs()),
-		pongc:    make(chan struct{}, 1),
+		host:            host,
+		debug:           opts.Debug,
+		client:          client,
+		pendingMessages: make(map[string]struct{}),
+		outMessage:      make(chan struct{}, opts.maxPendMsgs()),
+		pong:            make(chan struct{}, 1),
 	}
 
 	go func() {
