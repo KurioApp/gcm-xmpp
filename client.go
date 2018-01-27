@@ -144,7 +144,7 @@ func (c *Client) Ping(ctx context.Context) error {
 		return errors.New("gcm-xmpp: not in connected state")
 	}
 
-	// clear pongc
+	// clear pong
 	for i := 0; i < len(c.pong); i++ {
 		<-c.pong
 	}
