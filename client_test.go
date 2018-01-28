@@ -48,7 +48,9 @@ func (o fixtureOptions) setup(t *testing.T) *fixture {
 
 	xmppClientFactory.On("NewXMPPClient", addr, user, o.apiKey).Return(xmppClient, nil)
 
-	client, err := xmpp.NewClientWithFactory(o.senderID, o.apiKey, handler, o.clientOpts, xmppClientFactory)
+	// override the XMPPClientFactory
+	o.clientOpts.XMPPClientFactory = xmppClientFactory
+	client, err := xmpp.NewClient(o.senderID, o.apiKey, handler, o.clientOpts)
 	if err != nil {
 		t.Fatal(err)
 	}

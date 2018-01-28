@@ -51,10 +51,11 @@ const (
 	stateClosed
 )
 
+// DefaultXMPPClientFactory is the default XMPPClientFactory.
 var DefaultXMPPClientFactory = RealXMPPClientFactory{}
 
 // Client of the GCM.
-type Client struct {
+type Client struct { // nolint: maligned
 	host  string
 	debug bool
 
@@ -182,7 +183,7 @@ func (c *Client) sendAck(msgID string, to string) error {
 	return err
 }
 
-func (c *Client) listen(h Handler) error {
+func (c *Client) listen(h Handler) error { // nolint: gocyclo
 	for i := 0; ; i++ {
 		stanza, err := c.client.Recv()
 		if err != nil {
@@ -302,15 +303,11 @@ func (c *Client) Close(ctx context.Context) error {
 
 // NewClient constructs new Client.
 func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Client, error) {
-	return NewClientWithFactory(senderID, apiKey, h, opts, DefaultXMPPClientFactory)
-}
-
-// NewClientWithFactory constructs new Client using provided factory.
-func NewClientWithFactory(senderID int, apiKey string, h Handler, opts ClientOptions, xmppClientFactory XMPPClientFactory) (*Client, error) {
 	host, port := opts.Endpoint.Addr()
 	addr := fmt.Sprintf("%s:%d", host, port)
 	user := fmt.Sprintf("%d@%s", senderID, host)
-	client, err := xmppClientFactory.NewXMPPClient(addr, user, apiKey)
+	factory := opts.xmppClientFactory()
+	client, err := factory.NewXMPPClient(addr, user, apiKey)
 	if err != nil {
 		return nil, err
 	}
@@ -335,9 +332,10 @@ func NewClientWithFactory(senderID int, apiKey string, h Handler, opts ClientOpt
 
 // ClientOptions is the options for the client.
 type ClientOptions struct {
-	Endpoint           Endpoint // Used endpoint Default to Prod.
-	MaxPendingMessages uint     // Max pending messages. Default to 100.
-	Debug              bool     // Enable debug mode. Default to false.
+	Endpoint           Endpoint          // Used endpoint Default to Prod.
+	MaxPendingMessages uint              // Max pending messages. Default to 100.
+	Debug              bool              // Enable debug mode. Default to false.
+	XMPPClientFactory  XMPPClientFactory // The XMPPClientFactory. Default to DefaultXMPPClientFactory.
 }
 
 func (c ClientOptions) maxPendMsgs() uint {
@@ -346,6 +344,14 @@ func (c ClientOptions) maxPendMsgs() uint {
 	}
 
 	return c.MaxPendingMessages
+}
+
+func (c *ClientOptions) xmppClientFactory() XMPPClientFactory {
+	if c.XMPPClientFactory == nil {
+		return DefaultXMPPClientFactory
+	}
+
+	return c.XMPPClientFactory
 }
 
 // Handler handle incoming message.
