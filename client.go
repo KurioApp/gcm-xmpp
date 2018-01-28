@@ -15,6 +15,16 @@ import (
 	xmpp "github.com/mattn/go-xmpp"
 )
 
+type addr struct {
+	host string
+	port int
+}
+
+var addrs = [...]addr{
+	addr{host: "gcm.googleapis.com", port: 5235},         // Prod
+	addr{host: "gcm-preprod.googleapis.com", port: 5236}, // PreProd
+}
+
 // Endpoint is the endpoint type. Options: Prod and PreProd
 type Endpoint int
 
@@ -26,13 +36,11 @@ const (
 	PreProd
 )
 
-const (
-	prodHost = "gcm.googleapis.com"
-	prodPort = 5235
-
-	preProdHost = "gcm-preprod.googleapis.com"
-	preProdPort = 5236
-)
+// Addr return the host and port.
+func (e Endpoint) Addr() (string, int) {
+	v := addrs[e]
+	return v.host, v.port
+}
 
 const stanzaFmt = `<message id="%s"><gcm xmlns="google:mobile:data">%v</gcm></message>`
 const duration4Weeks = 4 * 7 * 24 * time.Hour
@@ -43,12 +51,14 @@ const (
 	stateClosed
 )
 
+var DefaultXMPPClientFactory = RealXMPPClientFactory{}
+
 // Client of the GCM.
 type Client struct {
 	host  string
 	debug bool
 
-	client     *xmpp.Client
+	client     XMPPClient
 	outMessage chan struct{}
 
 	pendingMessagesMu sync.RWMutex
@@ -290,12 +300,17 @@ func (c *Client) Close(ctx context.Context) error {
 	}
 }
 
-// NewClient constructs new client.
+// NewClient constructs new Client.
 func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Client, error) {
-	host, port := opts.endpoint()
+	return NewClientWithFactory(senderID, apiKey, h, opts, DefaultXMPPClientFactory)
+}
+
+// NewClientWithFactory constructs new Client using provided factory.
+func NewClientWithFactory(senderID int, apiKey string, h Handler, opts ClientOptions, xmppClientFactory XMPPClientFactory) (*Client, error) {
+	host, port := opts.Endpoint.Addr()
 	addr := fmt.Sprintf("%s:%d", host, port)
 	user := fmt.Sprintf("%d@%s", senderID, host)
-	client, err := xmpp.NewClient(addr, user, apiKey, false)
+	client, err := xmppClientFactory.NewXMPPClient(addr, user, apiKey)
 	if err != nil {
 		return nil, err
 	}
@@ -323,14 +338,6 @@ type ClientOptions struct {
 	Endpoint           Endpoint // Used endpoint Default to Prod.
 	MaxPendingMessages uint     // Max pending messages. Default to 100.
 	Debug              bool     // Enable debug mode. Default to false.
-}
-
-func (c ClientOptions) endpoint() (string, int) {
-	if c.Endpoint == PreProd {
-		return preProdHost, preProdPort
-	}
-
-	return prodHost, prodPort
 }
 
 func (c ClientOptions) maxPendMsgs() uint {

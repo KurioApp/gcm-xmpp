@@ -39,17 +39,32 @@ lint-prepare:
 
 .PHONY: lint
 lint: vendor
-	@gometalinter --cyclo-over=20 --deadline=2m $(PACKAGES)
+	@gometalinter --cyclo-over=20 --deadline=2m --vendor ./...
+
+# Mock
+.PHONY: mockery-prepare
+mockery-prepare:
+	@echo "Installing mockery"
+	@go get github.com/vektra/mockery/.../
+
+internal/mocks/XMPPClient.go: xmpp.go
+	@mockery -name=XMPPClient -output=internal/mocks
+
+internal/mocks/XMPPClientFactory.go: xmpp.go
+	@mockery -name=XMPPClientFactory -output=internal/mocks
+
+internal/mocks/Handler.go: client.go
+	@mockery -name=Handler -output=internal/mocks
 
 # Testing
 .PHONY: test
 test: vendor
-	@go test -short $(PACKAGES)
+	@go test -short
 
 # Build and Installation
 .PHONY: install
 install: vendor
-	@go install $(PACKAGES)
+	@go install
 
 .PHONY: uninstall
 uninstall:
