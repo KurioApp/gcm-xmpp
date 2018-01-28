@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -269,7 +270,7 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 			}
 		}
 		if i%1000 == 0 {
-			time.Sleep(20 * time.Millisecond)
+			runtime.Gosched()
 		}
 	}
 }
