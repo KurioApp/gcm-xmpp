@@ -156,9 +156,14 @@ func (c *Client) Ping(ctx context.Context) error {
 		return errors.New("gcm-xmpp: not in connected state")
 	}
 
-	// clear pong
-	for i := 0; i < len(c.pong); i++ {
-		<-c.pong
+	// clearing pong
+Loop:
+	for {
+		select {
+		case <-c.pong:
+		default:
+			break Loop
+		}
 	}
 
 	if err := c.client.PingC2S("", c.host); err != nil {
@@ -194,8 +199,12 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 		switch v := stanza.(type) {
 		case xmpp.Chat:
 		case xmpp.IQ:
-			if v.Type == "result" && v.ID == "c2s1" && len(c.pong) == 0 {
-				c.pong <- struct{}{}
+			if v.Type == "result" && v.ID == "c2s1" {
+				select {
+				case c.pong <- struct{}{}:
+				default:
+					// full
+				}
 			}
 			continue
 		default:
