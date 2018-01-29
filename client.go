@@ -446,7 +446,7 @@ type Receipt struct {
 	MessageStatus string    // Message status (ex: MESSAGE_SENT_TO_DEVICE).
 	MessageID     string    // Original message id.
 	From          string    // App registration token.
-	SentTime      time.Time // Sent timestamp.
+	SentTime      time.Time // Message sent timestamp.
 }
 
 // Control message.
