@@ -345,7 +345,7 @@ type ClientOptions struct {
 	Endpoint           Endpoint          // Used endpoint Default to Prod.
 	MaxPendingMessages uint              // Max pending messages. Default to 100.
 	Debug              bool              // Enable debug mode. Default to false.
-	XMPPClientFactory  XMPPClientFactory // The XMPPClientFactory. Default to DefaultXMPPClientFactory.
+	XMPPClientFactory  XMPPClientFactory // The XMPPClientFactory. Default to RealXMPPClientFactory.
 }
 
 func (c ClientOptions) maxPendMsgs() uint {
