@@ -61,15 +61,44 @@ type Client struct { // nolint: maligned
 	debug bool
 
 	client     XMPPClient
+	wg         sync.WaitGroup
 	outMessage chan struct{}
+	state      int32
 
 	pendingMessagesMu sync.RWMutex
 	pendingMessages   map[string]struct{}
 
 	pingMu sync.Mutex
 	pong   chan struct{}
+}
 
-	state int32
+// NewClient constructs new Client.
+func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Client, error) {
+	host, port := opts.Endpoint.Addr()
+	addr := fmt.Sprintf("%s:%d", host, port)
+	user := fmt.Sprintf("%d@%s", senderID, host)
+	factory := opts.xmppClientFactory()
+	client, err := factory.NewXMPPClient(addr, user, apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	c := &Client{
+		host:            host,
+		debug:           opts.Debug,
+		client:          client,
+		pendingMessages: make(map[string]struct{}),
+		outMessage:      make(chan struct{}, opts.maxPendMsgs()),
+		pong:            make(chan struct{}, 1),
+	}
+
+	go func() {
+		if err := c.listen(h); err != nil {
+			atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosed)
+		}
+	}()
+
+	return c, nil
 }
 
 func (c *Client) trackPendingMsg(id string) bool {
@@ -96,20 +125,15 @@ func (c *Client) untrackPendingMsg(id string) bool {
 	return true
 }
 
-func (c *Client) countPendingMessages() int {
-	c.pendingMessagesMu.RLock()
-	defer c.pendingMessagesMu.RUnlock()
-
-	return len(c.pendingMessages)
-}
-
 // SendData to a destination token.
 func (c *Client) SendData(ctx context.Context, msgID string, token string, data interface{}, opts SendOptions) (err error) {
 	select {
 	case c.outMessage <- struct{}{}:
+		c.wg.Add(1)
 		defer func() {
 			if err != nil {
 				<-c.outMessage
+				c.wg.Done()
 			}
 		}()
 	case <-ctx.Done():
@@ -232,6 +256,7 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 
 				<-c.outMessage
 				_ = h.Handle(c, Ack{From: sm.From, MessageID: sm.MessageID, CanonicalRegistrationID: sm.RegistrationID}) // nolint: gas
+				c.wg.Done()
 			case "nack":
 				if ok := c.untrackPendingMsg(sm.MessageID); !ok {
 					continue
@@ -239,6 +264,7 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 
 				<-c.outMessage
 				_ = h.Handle(c, Nack{From: sm.From, MessageID: sm.MessageID, Error: sm.Error, ErrorDescription: sm.ErrorDescription}) // nolint: gas
+				c.wg.Done()
 			default:
 				if c.debug {
 					log.Printf("Unrecognized message type: %#v\n", sm)
@@ -292,52 +318,30 @@ func (c *Client) Close(ctx context.Context) error {
 
 	defer atomic.StoreInt32(&c.state, stateClosed)
 
-	if c.countPendingMessages() == 0 {
+	done := waitDone(&c.wg)
+	select {
+	case <-done:
 		return c.client.Close()
+	default:
 	}
 
-	timer := time.NewTicker(100 * time.Millisecond)
-	defer timer.Stop()
-	for {
-		select {
-		case <-timer.C:
-			if c.countPendingMessages() == 0 {
-				return c.client.Close()
-			}
-		case <-ctx.Done():
-			_ = c.client.Close() // nolint: gas
-			return ctx.Err()
-		}
+	select {
+	case <-waitDone(&c.wg):
+		return c.client.Close()
+	case <-ctx.Done():
+		_ = c.client.Close() // nolint: gas
+		return ctx.Err()
 	}
 }
 
-// NewClient constructs new Client.
-func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Client, error) {
-	host, port := opts.Endpoint.Addr()
-	addr := fmt.Sprintf("%s:%d", host, port)
-	user := fmt.Sprintf("%d@%s", senderID, host)
-	factory := opts.xmppClientFactory()
-	client, err := factory.NewXMPPClient(addr, user, apiKey)
-	if err != nil {
-		return nil, err
-	}
-
-	c := &Client{
-		host:            host,
-		debug:           opts.Debug,
-		client:          client,
-		pendingMessages: make(map[string]struct{}),
-		outMessage:      make(chan struct{}, opts.maxPendMsgs()),
-		pong:            make(chan struct{}, 1),
-	}
+func waitDone(wg *sync.WaitGroup) <-chan struct{} {
+	done := make(chan struct{})
 
 	go func() {
-		if err := c.listen(h); err != nil {
-			atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosed)
-		}
+		wg.Wait()
+		close(done)
 	}()
-
-	return c, nil
+	return done
 }
 
 // ClientOptions is the options for the client.
