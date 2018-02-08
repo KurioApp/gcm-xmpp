@@ -64,6 +64,7 @@ type Client struct { // nolint: maligned
 	wg         sync.WaitGroup
 	outMessage chan struct{}
 	state      int32
+	done       chan struct{}
 
 	pendingMessagesMu sync.RWMutex
 	pendingMessages   map[string]struct{}
@@ -90,12 +91,14 @@ func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Cli
 		pendingMessages: make(map[string]struct{}),
 		outMessage:      make(chan struct{}, opts.maxPendMsgs()),
 		pong:            make(chan struct{}, 1),
+		done:            make(chan struct{}),
 	}
 
 	go func() {
 		if err := c.listen(h); err != nil {
 			atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosed)
 		}
+		close(c.done)
 	}()
 
 	return c, nil
@@ -308,6 +311,11 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 			runtime.Gosched()
 		}
 	}
+}
+
+// Done is done channel that will closed if all the resources released.
+func (c *Client) Done() <-chan struct{} {
+	return c.done
 }
 
 // Close the client.
