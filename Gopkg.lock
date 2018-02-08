@@ -2,14 +2,41 @@
 
 
 [[projects]]
+  name = "github.com/davecgh/go-spew"
+  packages = ["spew"]
+  revision = "346938d642f2ec3594ed81d874461961cd0faa76"
+  version = "v1.1.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/mattn/go-xmpp"
   packages = ["."]
-  revision = "44c76a8761681b259e6013e9f442df96735a723a"
+  revision = "7ec2b8b7def69491528689aeb58253e9421a4b73"
+
+[[projects]]
+  name = "github.com/pmezard/go-difflib"
+  packages = ["difflib"]
+  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
+  version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/stretchr/objx"
+  packages = ["."]
+  revision = "facf9a85c22f48d2f52f2380e4efce1768749a89"
+  version = "v0.1"
+
+[[projects]]
+  name = "github.com/stretchr/testify"
+  packages = [
+    "assert",
+    "mock"
+  ]
+  revision = "12b6f73e6084dad08a7c6e575284b177ecafbc71"
+  version = "v1.2.1"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "127f8b90f2cf1d015f8a4c6602802fa38f4898470d180ad95fbdfd3a5c65ae33"
+  inputs-digest = "9c75a39a45695c81812746da4b7e3ac9c70d3a36052fc7b17e17cf9863a8a23a"
   solver-name = "gps-cdcl"
   solver-version = 1
