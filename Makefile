@@ -59,7 +59,7 @@ internal/mocks/Handler.go: client.go
 # Testing
 .PHONY: test
 test: vendor
-	@go test -short $(TEST_OPTS)
+	@go test $(TEST_OPTS)
 
 # Build and Installation
 .PHONY: install
