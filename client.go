@@ -326,7 +326,7 @@ func (c *Client) Close(ctx context.Context) error {
 	}
 
 	select {
-	case <-waitDone(&c.wg):
+	case <-done:
 		return c.client.Close()
 	case <-ctx.Done():
 		_ = c.client.Close() // nolint: gas
@@ -336,7 +336,6 @@ func (c *Client) Close(ctx context.Context) error {
 
 func waitDone(wg *sync.WaitGroup) <-chan struct{} {
 	done := make(chan struct{})
-
 	go func() {
 		wg.Wait()
 		close(done)
