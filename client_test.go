@@ -164,10 +164,8 @@ func TestClient_SendData_thenClose(t *testing.T) {
 	}
 
 	// Close
-	closed, done := make(chan time.Time), make(chan struct{})
-	fix.xmppClient.On("Recv").Return(nil, errors.New("closed")).WaitUntil(closed).Run(func(args mock.Arguments) {
-		close(done)
-	})
+	closed := make(chan time.Time)
+	fix.xmppClient.On("Recv").Return(nil, errors.New("closed")).WaitUntil(closed)
 	fix.xmppClient.On("Close").Return(nil).Run(func(args mock.Arguments) {
 		close(closed)
 	})
@@ -179,11 +177,9 @@ func TestClient_SendData_thenClose(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !waitUntil(done, 500*time.Millisecond) {
+	if !waitUntil(fix.client().Done(), 500*time.Millisecond) {
 		t.Fatal("Fatal")
 	}
-
-	<-fix.client().Done()
 }
 
 func TestClient_SendData_noAckThenClose_timeout(t *testing.T) {
@@ -248,11 +244,8 @@ func TestClient_Close(t *testing.T) {
 	fix := opts.setup(t)
 	defer fix.tearDown()
 
-	closed, done := make(chan time.Time), make(chan struct{})
-	fix.xmppClient.On("Recv").Return(nil, errors.New("closed")).WaitUntil(closed).Run(func(args mock.Arguments) {
-		close(done)
-	})
-
+	closed := make(chan time.Time)
+	fix.xmppClient.On("Recv").Return(nil, errors.New("closed")).WaitUntil(closed)
 	fix.xmppClient.On("Close").Return(nil).Run(func(args mock.Arguments) {
 		close(closed)
 	})
@@ -264,7 +257,7 @@ func TestClient_Close(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !waitUntil(done, 500*time.Millisecond) {
+	if !waitUntil(fix.client().Done(), 500*time.Millisecond) {
 		t.Fatal("Fatal")
 	}
 }
