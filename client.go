@@ -128,8 +128,8 @@ func (c *Client) untrackPendingMsg(id string) bool {
 	return true
 }
 
-// SendData to a destination token.
-func (c *Client) SendData(ctx context.Context, msgID string, token string, data interface{}, opts SendOptions) (err error) {
+// SendData to a destination app identified by regID.
+func (c *Client) SendData(ctx context.Context, msgID string, regID string, data interface{}, opts SendOptions) (err error) {
 	select {
 	case c.outMessage <- struct{}{}:
 		c.wg.Add(1)
@@ -159,7 +159,7 @@ func (c *Client) SendData(ctx context.Context, msgID string, token string, data 
 
 	msg := message{
 		ID:   msgID,
-		To:   token,
+		To:   regID,
 		Data: data,
 		DeliveryReceiptRequested: opts.RequestDeliveryReceipt,
 		DryRun:     opts.DryRun,
@@ -456,7 +456,7 @@ type Ack struct {
 // Nack message.
 type Nack struct {
 	MessageID        string // Original message id.
-	From             string // App registration token.
+	From             string // App registration id.
 	Error            string // Error code (ex: BAD_REGISTRATION, DEVICE_MESSAGE_RATE_EXCEEDED, INVALID_JSON).
 	ErrorDescription string // Error description.
 }
@@ -465,7 +465,7 @@ type Nack struct {
 type Receipt struct {
 	MessageStatus string    // Message status (ex: MESSAGE_SENT_TO_DEVICE).
 	MessageID     string    // Original message id.
-	From          string    // App registration token.
+	From          string    // App registration id.
 	SentTime      time.Time // Message sent timestamp.
 }
 
