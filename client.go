@@ -48,9 +48,12 @@ const duration4Weeks = 4 * 7 * 24 * time.Hour
 
 const (
 	stateConnected int32 = iota
+	stateDraining
 	stateClosing
 	stateClosed
 )
+
+const codeDraining = "CONNECTION_DRAINING"
 
 // DefaultXMPPClientFactory is the default XMPPClientFactory.
 var DefaultXMPPClientFactory = RealXMPPClientFactory{}
@@ -96,7 +99,7 @@ func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Cli
 
 	go func() {
 		if err := c.listen(h); err != nil {
-			atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosed)
+			_ = atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosed) || atomic.CompareAndSwapInt32(&c.state, stateDraining, stateClosed)
 		}
 		close(c.done)
 	}()
@@ -179,7 +182,8 @@ func (c *Client) Ping(ctx context.Context) error {
 	c.pingMu.Lock()
 	defer c.pingMu.Unlock()
 
-	if atomic.LoadInt32(&c.state) != stateConnected {
+	state := atomic.LoadInt32(&c.state)
+	if state != stateConnected && state != stateDraining {
 		return errors.New("gcm-xmpp: not in connected state")
 	}
 
@@ -265,6 +269,10 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 					continue
 				}
 
+				if sm.Error == codeDraining {
+					atomic.CompareAndSwapInt32(&c.state, stateConnected, stateDraining)
+				}
+
 				<-c.outMessage
 				_ = h.Handle(c, Nack{From: sm.From, MessageID: sm.MessageID, Error: sm.Error, ErrorDescription: sm.ErrorDescription}) // nolint: gas
 				c.wg.Done()
@@ -296,6 +304,10 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 					return err
 				}
 			case "control":
+				if sm.ControlType == codeDraining {
+					atomic.CompareAndSwapInt32(&c.state, stateConnected, stateDraining)
+				}
+
 				_ = h.Handle(c, Control{Type: sm.ControlType}) // nolint: gas
 			default:
 				if c.debug {
@@ -319,8 +331,13 @@ func (c *Client) Done() <-chan struct{} {
 }
 
 // Close the client.
+//
+// Use the ctx cancelation/deadline wisely. If the cancelation initiateed or
+// deadline exceed then the connection will be forced to close without waiting
+// the un-ack responses.
 func (c *Client) Close(ctx context.Context) error {
-	if !atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosing) {
+	if !(atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosing) ||
+		atomic.CompareAndSwapInt32(&c.state, stateDraining, stateClosing)) {
 		return errors.New("gcm-xmpp: not in connected state")
 	}
 
