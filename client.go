@@ -47,10 +47,17 @@ const stanzaFmt = `<message id="%s"><gcm xmlns="google:mobile:data">%v</gcm></me
 const duration4Weeks = 4 * 7 * 24 * time.Hour
 
 const (
-	stateConnected int32 = iota
-	stateDraining
-	stateClosing
-	stateClosed
+	// StateConnected which the connection establish and ready to be use.
+	StateConnected int32 = iota
+
+	// StateDraining which the connection is draining, should no any new message sent from here.
+	StateDraining
+
+	// StateClosing which the connection is in closing state.
+	StateClosing
+
+	// StateClosed which the connection already closed.
+	StateClosed
 )
 
 const codeDraining = "CONNECTION_DRAINING"
@@ -99,7 +106,7 @@ func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Cli
 
 	go func() {
 		if err := c.listen(h); err != nil {
-			_ = atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosed) || atomic.CompareAndSwapInt32(&c.state, stateDraining, stateClosed)
+			_ = atomic.CompareAndSwapInt32(&c.state, StateConnected, StateClosed) || atomic.CompareAndSwapInt32(&c.state, StateDraining, StateClosed)
 		}
 		close(c.done)
 	}()
@@ -146,7 +153,7 @@ func (c *Client) SendData(ctx context.Context, msgID string, regID string, data 
 		return ctx.Err()
 	}
 
-	if atomic.LoadInt32(&c.state) != stateConnected {
+	if atomic.LoadInt32(&c.state) != StateConnected {
 		return errors.New("gcm-xmpp: not in connected state")
 	}
 
@@ -183,7 +190,7 @@ func (c *Client) Ping(ctx context.Context) error {
 	defer c.pingMu.Unlock()
 
 	state := atomic.LoadInt32(&c.state)
-	if state != stateConnected && state != stateDraining {
+	if state != StateConnected && state != StateDraining {
 		return errors.New("gcm-xmpp: not in connected state")
 	}
 
@@ -270,7 +277,7 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 				}
 
 				if sm.Error == codeDraining {
-					atomic.CompareAndSwapInt32(&c.state, stateConnected, stateDraining)
+					atomic.CompareAndSwapInt32(&c.state, StateConnected, StateDraining)
 				}
 
 				<-c.outMessage
@@ -305,7 +312,7 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 				}
 			case "control":
 				if sm.ControlType == codeDraining {
-					atomic.CompareAndSwapInt32(&c.state, stateConnected, stateDraining)
+					atomic.CompareAndSwapInt32(&c.state, StateConnected, StateDraining)
 				}
 
 				_ = h.Handle(c, Control{Type: sm.ControlType}) // nolint: gas
@@ -325,6 +332,11 @@ func (c *Client) listen(h Handler) error { // nolint: gocyclo
 	}
 }
 
+// State of the client.
+func (c *Client) State() int32 {
+	return atomic.LoadInt32(&c.state)
+}
+
 // Done is done channel that will closed if all the resources released.
 func (c *Client) Done() <-chan struct{} {
 	return c.done
@@ -336,12 +348,12 @@ func (c *Client) Done() <-chan struct{} {
 // deadline exceed then the connection will be forced to close without waiting
 // the un-ack responses.
 func (c *Client) Close(ctx context.Context) error {
-	if !(atomic.CompareAndSwapInt32(&c.state, stateConnected, stateClosing) ||
-		atomic.CompareAndSwapInt32(&c.state, stateDraining, stateClosing)) {
+	if !(atomic.CompareAndSwapInt32(&c.state, StateConnected, StateClosing) ||
+		atomic.CompareAndSwapInt32(&c.state, StateDraining, StateClosing)) {
 		return errors.New("gcm-xmpp: not in connected state")
 	}
 
-	defer atomic.StoreInt32(&c.state, stateClosed)
+	defer atomic.StoreInt32(&c.state, StateClosed)
 
 	done := waitDone(&c.wg)
 	select {

@@ -170,12 +170,7 @@ func TestClient_SendData_thenClose(t *testing.T) {
 		close(closed)
 	})
 
-	closeCtx, cancelCtx := context.WithTimeout(context.Background(), 500*time.Second)
-	defer cancelCtx()
-	err = fix.client().Close(closeCtx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	closeClient(t, fix.client())
 
 	if !waitUntil(fix.client().Done(), 500*time.Millisecond) {
 		t.Fatal("Fatal")
@@ -235,6 +230,115 @@ func TestClient_SendData_noAckThenClose_timeout(t *testing.T) {
 	<-recvErrReturned
 }
 
+func TestClient_NackConnectionDraining(t *testing.T) {
+	opts := fixtureOptions{
+		senderID:   1616,
+		apiKey:     "an-api-key",
+		clientOpts: xmpp.ClientOptions{},
+	}
+	fix := opts.setup(t)
+	defer fix.tearDown()
+
+	// SendData
+	var (
+		msgID = "a-msg-id"
+		token = "a-token"
+		data  = map[string]interface{}{
+			"title": "Greet",
+			"body":  "Hello World!",
+		}
+		sendOpts = xmpp.SendOptions{}
+	)
+
+	dataSent := make(chan time.Time)
+	chat := goxmpp.Chat{
+		Other: []string{fmt.Sprintf(`{"from": "%s", "message_id": "%s", "message_type": "nack", "error": "CONNECTION_DRAINING"}`, token, msgID)},
+	}
+
+	fix.xmppClient.On("Recv").Return(chat, nil).WaitUntil(dataSent).Once()
+	fix.xmppClient.On("SendOrg", mock.AnythingOfType("string")).Return(func(org string) int {
+		return len(org)
+	}, nil).Run(func(args mock.Arguments) {
+		close(dataSent)
+	})
+
+	handled := make(chan struct{})
+	fix.handler.On("Handle", fix.client(), xmpp.Nack{From: token, MessageID: msgID, Error: "CONNECTION_DRAINING"}).Return(nil).Run(func(args mock.Arguments) {
+		close(handled)
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	err := fix.client().SendData(ctx, msgID, token, data, sendOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !waitUntil(handled, 500*time.Millisecond) {
+		t.Fatal("Timeout")
+	}
+
+	if got, want := fix.client().State(), xmpp.StateDraining; got != want {
+		t.Fatal("got:", got, "want:", want)
+	}
+
+	// Close
+	closed := make(chan time.Time)
+	fix.xmppClient.On("Recv").Return(nil, errors.New("closed")).WaitUntil(closed)
+	fix.xmppClient.On("Close").Return(nil).Run(func(args mock.Arguments) {
+		close(closed)
+	})
+
+	closeClient(t, fix.client())
+
+	if !waitUntil(fix.client().Done(), 500*time.Millisecond) {
+		t.Fatal("Fatal")
+	}
+}
+
+func TestClient_ControlConnectionDraining(t *testing.T) {
+	opts := fixtureOptions{
+		senderID:   1616,
+		apiKey:     "an-api-key",
+		clientOpts: xmpp.ClientOptions{},
+	}
+	fix := opts.setup(t)
+	defer fix.tearDown()
+
+	chat := goxmpp.Chat{
+		Type:  "normal",
+		Other: []string{`{"message_type": "control", "control_type": "CONNECTION_DRAINING"}`},
+	}
+
+	fix.xmppClient.On("Recv").Return(chat, nil).Once()
+
+	handled := make(chan struct{})
+	fix.handler.On("Handle", fix.client(), xmpp.Control{Type: "CONNECTION_DRAINING"}).Return(nil).Run(func(args mock.Arguments) {
+		close(handled)
+	})
+
+	if !waitUntil(handled, 500*time.Millisecond) {
+		t.Fatal("Timeout")
+	}
+
+	if got, want := fix.client().State(), xmpp.StateDraining; got != want {
+		t.Fatal("got:", got, "want:", want)
+	}
+
+	// Close
+	closed := make(chan time.Time)
+	fix.xmppClient.On("Recv").Return(nil, errors.New("closed")).WaitUntil(closed)
+	fix.xmppClient.On("Close").Return(nil).Run(func(args mock.Arguments) {
+		close(closed)
+	})
+
+	closeClient(t, fix.client())
+
+	if !waitUntil(fix.client().Done(), 500*time.Millisecond) {
+		t.Fatal("Fatal")
+	}
+}
+
 func TestClient_Close(t *testing.T) {
 	opts := fixtureOptions{
 		senderID:   1616,
@@ -250,12 +354,11 @@ func TestClient_Close(t *testing.T) {
 		close(closed)
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Second)
-	defer cancel()
-	err := fix.client().Close(ctx)
-	if err != nil {
-		t.Fatal(err)
+	if got, want := fix.client().State(), xmpp.StateConnected; got != want {
+		t.Fatal("got:", got, "want:", want)
 	}
+
+	closeClient(t, fix.client())
 
 	if !waitUntil(fix.client().Done(), 500*time.Millisecond) {
 		t.Fatal("Fatal")
@@ -268,5 +371,20 @@ func waitUntil(c <-chan struct{}, timeout time.Duration) bool {
 		return true
 	case <-time.After(timeout):
 		return false
+	}
+}
+
+func closeClient(t *testing.T, c *xmpp.Client) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Second)
+	defer cancel()
+
+	err := c.Close(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := c.State(), xmpp.StateClosed; got != want {
+		t.Fatal("got:", got, "want:", want)
 	}
 }
