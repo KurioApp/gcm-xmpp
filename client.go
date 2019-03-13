@@ -22,8 +22,8 @@ type addr struct {
 }
 
 var addrs = [...]addr{
-	addr{host: "gcm.googleapis.com", port: 5235},         // Prod
-	addr{host: "gcm-preprod.googleapis.com", port: 5236}, // PreProd
+	addr{host: "fcm-xmpp.googleapis.com", port: 5235}, // Prod
+	addr{host: "fcm-xmpp.googleapis.com", port: 5236}, // PreProd
 }
 
 // Endpoint is the endpoint type. Options: Prod and PreProd
