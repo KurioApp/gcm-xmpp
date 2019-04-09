@@ -87,7 +87,7 @@ type Client struct { // nolint: maligned
 func NewClient(senderID int, apiKey string, h Handler, opts ClientOptions) (*Client, error) {
 	host, port := opts.Endpoint.Addr()
 	addr := fmt.Sprintf("%s:%d", host, port)
-	user := fmt.Sprintf("%d@%s", senderID, host)
+	user := fmt.Sprintf("%d@gcm.googleapis.com", senderID)
 	factory := opts.xmppClientFactory()
 	client, err := factory.NewXMPPClient(addr, user, apiKey)
 	if err != nil {
