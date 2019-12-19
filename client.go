@@ -168,12 +168,59 @@ func (c *Client) SendData(ctx context.Context, msgID string, regID string, data 
 	}()
 
 	msg := message{
-		ID:   msgID,
-		To:   regID,
-		Data: data,
+		ID:                       msgID,
+		To:                       regID,
+		Data:                     data,
 		DeliveryReceiptRequested: opts.RequestDeliveryReceipt,
-		DryRun:     opts.DryRun,
-		TimeToLive: opts.ttl(),
+		DryRun:                   opts.DryRun,
+		TimeToLive:               opts.ttl(),
+	}
+	stanza, err := buildStanza(msg)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.client.SendOrg(stanza)
+	return err
+}
+
+// SendMessage to a destination app identified by regID using FCM Message object
+func (c *Client) SendMessage(ctx context.Context, msgID string, regID string, notification Notification, data interface{}, opts SendOptions) (err error) {
+	select {
+	case c.outMessage <- struct{}{}:
+		c.wg.Add(1)
+		defer func() {
+			if err != nil {
+				<-c.outMessage
+				c.wg.Done()
+			}
+		}()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	if atomic.LoadInt32(&c.state) != StateConnected {
+		return errors.New("gcm-xmpp: not in connected state")
+	}
+
+	if ok := c.trackPendingMsg(msgID); !ok {
+		return errors.New("gcm-xmpp: duplicate message")
+	}
+
+	defer func() {
+		if err != nil {
+			c.untrackPendingMsg(msgID)
+		}
+	}()
+
+	msg := message{
+		ID:                       msgID,
+		To:                       regID,
+		Notification:             notification,
+		Data:                     data,
+		DeliveryReceiptRequested: opts.RequestDeliveryReceipt,
+		DryRun:                   opts.DryRun,
+		TimeToLive:               opts.ttl(),
 	}
 	stanza, err := buildStanza(msg)
 	if err != nil {
@@ -431,14 +478,21 @@ func buildStanza(m message) (string, error) {
 	return fmt.Sprintf(stanzaFmt, m.ID, string(body)), nil
 }
 
+type Notification struct {
+	Title string `json:"title"`
+	Body  string `json:"body"`
+	Image string `json:"image"`
+}
+
 type message struct {
-	To                       string      `json:"to"`
-	ID                       string      `json:"message_id"`
-	Type                     string      `json:"message_type,omitempty"`
-	DeliveryReceiptRequested bool        `json:"delivery_receipt_requested,omitempty"`
-	DryRun                   bool        `json:"dry_run,omitempty"`
-	TimeToLive               uint        `json:"time_to_live,omitempty"`
-	Data                     interface{} `json:"data"`
+	To                       string       `json:"to"`
+	ID                       string       `json:"message_id"`
+	Type                     string       `json:"message_type,omitempty"`
+	DeliveryReceiptRequested bool         `json:"delivery_receipt_requested,omitempty"`
+	DryRun                   bool         `json:"dry_run,omitempty"`
+	TimeToLive               uint         `json:"time_to_live,omitempty"`
+	Notification             Notification `json:"notification,omitempty"`
+	Data                     interface{}  `json:"data"`
 }
 
 type serverMessage struct {
