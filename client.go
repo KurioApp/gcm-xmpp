@@ -482,6 +482,7 @@ type Notification struct {
 	Title string `json:"title"`
 	Body  string `json:"body"`
 	Image string `json:"image"`
+	Sound string `json:"sound"`
 }
 
 type message struct {
