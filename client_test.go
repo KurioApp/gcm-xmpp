@@ -9,12 +9,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-
 	goxmpp "github.com/mattn/go-xmpp"
 
 	"github.com/KurioApp/gcm-xmpp/internal/mocks"
-
-	"github.com/KurioApp/gcm-xmpp"
+	xmpp "github.com/KurioApp/gcm-xmpp"
 )
 
 type fixture struct {
@@ -41,7 +39,7 @@ type fixtureOptions struct {
 func (o *fixtureOptions) setup(t *testing.T) *fixture {
 	host, port := o.clientOpts.Endpoint.Addr()
 	addr := fmt.Sprintf("%s:%d", host, port)
-	user := fmt.Sprintf("%d@%s", o.senderID, host)
+	user := fmt.Sprintf("%d@gcm.googleapis.com", o.senderID)
 
 	xmppClient := new(mocks.XMPPClient)
 	xmppClientFactory := new(mocks.XMPPClientFactory)
