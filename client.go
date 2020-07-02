@@ -216,7 +216,7 @@ func (c *Client) SendMessage(ctx context.Context, msgID string, regID string, no
 	msg := message{
 		ID:                       msgID,
 		To:                       regID,
-		Notification:             notification,
+		Notification:             &notification,
 		Data:                     data,
 		DeliveryReceiptRequested: opts.RequestDeliveryReceipt,
 		DryRun:                   opts.DryRun,
@@ -486,14 +486,14 @@ type Notification struct {
 }
 
 type message struct {
-	To                       string       `json:"to"`
-	ID                       string       `json:"message_id"`
-	Type                     string       `json:"message_type,omitempty"`
-	DeliveryReceiptRequested bool         `json:"delivery_receipt_requested,omitempty"`
-	DryRun                   bool         `json:"dry_run,omitempty"`
-	TimeToLive               uint         `json:"time_to_live,omitempty"`
-	Notification             Notification `json:"notification,omitempty"`
-	Data                     interface{}  `json:"data"`
+	To                       string        `json:"to"`
+	ID                       string        `json:"message_id"`
+	Type                     string        `json:"message_type,omitempty"`
+	DeliveryReceiptRequested bool          `json:"delivery_receipt_requested,omitempty"`
+	DryRun                   bool          `json:"dry_run,omitempty"`
+	TimeToLive               uint          `json:"time_to_live,omitempty"`
+	Notification             *Notification `json:"notification,omitempty"`
+	Data                     interface{}   `json:"data"`
 }
 
 type serverMessage struct {
